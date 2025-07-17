@@ -274,7 +274,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  np->traceMask=p->traceMask;   //复制系统调用源码
   np->parent = p;
 
   // copy saved user registers.
