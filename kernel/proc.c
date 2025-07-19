@@ -34,12 +34,13 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
+      // char *pa = kalloc();
+      // if(pa == 0)
+      //   panic("kalloc");
+      // uint64 va = KSTACK((int) (p - proc));
+      // kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+      // p->kstack = va;
+      //内核栈改为创建进程时候创建
   }
   kvminithart();
 }
@@ -121,6 +122,16 @@ found:
     return 0;
   }
 
+  //分配进程独立使用的内核页表
+  p->kernel_pagetable=kvminit_newpgtab();
+  char *pa=kalloc();
+  if(pa==0){
+    panic("kalloc");
+  }
+  uint64 va=KSTACK((int)0);
+  kvmmap(p->kernel_pagetable,va,(uint64)pa,PGSIZE,PTE_R|PTE_W);
+  p->kstack=va;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -149,6 +160,12 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+
+  void *pa=(void*)kvmpa(p->kernel_pagetable,p->kstack);
+  kfree(pa);
+  p->kstack=0;
+
+
   p->state = UNUSED;
 }
 
@@ -221,6 +238,8 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  kvmcopymap(p->pagetable,p->kernel_pagetable,0,p->sz);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -243,11 +262,19 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+    uint64 newsz;
+    if((newsz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+
+    if(kvmcopymap(p->pagetable,p->kernel_pagetable,sz,n)!=0){
+      uvmdealloc(p->pagetable,newsz,sz);
+      return -1;
+    }
+    sz=newsz;
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz=kvmdealloc(p->kernel_pagetable,sz,sz+n);
   }
   p->sz = sz;
   return 0;
@@ -268,7 +295,8 @@ fork(void)
   }
 
   // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0
+    || kvmcopymap(np->pagetable,np->kernel_pagetable,0,p->sz)<0){
     freeproc(np);
     release(&np->lock);
     return -1;
@@ -473,7 +501,10 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        w_satp(MAKE_SATP(p->kernel_pagetable));//进程内核页表设置到satp寄存器
+        sfence_vma();//刷新快表
         swtch(&c->context, &p->context);
+        kvminithart();  //切回全局内核页表
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
