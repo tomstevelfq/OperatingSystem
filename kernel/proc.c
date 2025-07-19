@@ -126,6 +126,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  p->traceMask=0;
 
   return p;
 }
@@ -274,7 +275,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-  np->traceMask=p->traceMask;   //复制系统调用源码
+  np->traceMask=p->traceMask;
   np->parent = p;
 
   // copy saved user registers.
@@ -691,5 +692,26 @@ procdump(void)
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
+  }
+}
+
+uint64
+sys_trace(void)
+{
+  int mask;
+  if(argint(0,&mask)<0){
+    return -1;
+  }
+  myproc()->traceMask=mask;
+  return 0;
+}
+
+void procnum(uint64* dst){
+  *dst=0;
+  struct proc* p;
+  for(p=proc;p<&proc[NPROC];p++){
+    if(p->state!=UNUSED){
+      (*dst)++;
+    }
   }
 }
