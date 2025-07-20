@@ -66,7 +66,7 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
-    // ok
+    //
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
@@ -77,8 +77,16 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){    //时钟中断触发
+    if(p->alarm_interval!=0&&--p->alarm_ticks<=0&&p->alarm_goingoff==0){
+      p->alarm_ticks=p->alarm_interval;
+      *p->alarm_trapframe=*p->trapframe;
+      p->trapframe->epc=(uint64)p->alarm_handler;
+      p->alarm_goingoff=1;
+    }
     yield();
+  }
+    
 
   usertrapret();
 }
@@ -218,3 +226,18 @@ devintr()
   }
 }
 
+//设置时钟属性
+int sigalarm(int ticks,void(*handler)()){
+  struct proc* p=myproc();
+  p->alarm_interval=ticks;
+  p->alarm_handler=handler;
+  p->alarm_ticks=ticks;
+  return 0;
+}
+
+int sigreturn(){
+  struct proc* p=myproc();
+  *p->trapframe=*p->alarm_trapframe;
+  p->alarm_goingoff=0;
+  return 0;
+}

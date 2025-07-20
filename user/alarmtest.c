@@ -17,6 +17,8 @@ void test1();
 void test2();
 void periodic();
 void slow_handler();
+int sigalarm(int ticks,void(*handler)());
+int sigreturn();
 
 int
 main(int argc, char *argv[])
