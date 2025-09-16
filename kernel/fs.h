@@ -5,12 +5,17 @@
 #define ROOTINO  1   // root i-number
 #define BSIZE 1024  // block size
 
+#define NDIRECT 11
+#define NINDIRECT (BSIZE / sizeof(uint))
+#define MAXFILE (NDIRECT + NINDIRECT + NINDIRECT * NINDIRECT)
+
 // Disk layout:
 // [ boot block | super block | log | inode blocks |
 //                                          free bit map | data blocks]
 //
 // mkfs computes the super block and builds an initial file system. The
 // super block describes the disk layout:
+//超级块信息
 struct superblock {
   uint magic;        // Must be FSMAGIC
   uint size;         // Size of file system image (blocks)
@@ -23,10 +28,6 @@ struct superblock {
 };
 
 #define FSMAGIC 0x10203040
-
-#define NDIRECT 12
-#define NINDIRECT (BSIZE / sizeof(uint))
-#define MAXFILE (NDIRECT + NINDIRECT)
 
 // On-disk inode structure
 struct dinode {

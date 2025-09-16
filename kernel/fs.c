@@ -239,6 +239,7 @@ iupdate(struct inode *ip)
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
+// 查询或者分配一个inode
 static struct inode*
 iget(uint dev, uint inum)
 {
@@ -401,6 +402,31 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  bn-=NINDIRECT;
+  if(bn<NINDIRECT*NINDIRECT){
+    if((addr=ip->addrs[NDIRECT+1])==0){
+      ip->addrs[NDIRECT+1]=addr=balloc(ip->dev);
+    }
+
+    bp=bread(ip->dev,addr);
+    a=(uint*)bp->data;
+    if((addr=a[bn/NINDIRECT])==0){
+      a[bn/NINDIRECT]=addr=balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+
+    b%=NINDIRECT;
+    bp=bread(ip->dev,addr);
+    a=(uint*)bp->data;
+    if((addr=a[bn])==0){
+      a[bn]=addr=balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+
   panic("bmap: out of range");
 }
 
@@ -553,6 +579,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
 }
 
 // Write a new directory entry (name, inum) into the directory dp.
+//在目录中插入一个新目录项
 int
 dirlink(struct inode *dp, char *name, uint inum)
 {

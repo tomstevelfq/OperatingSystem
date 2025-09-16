@@ -26,6 +26,7 @@ fileinit(void)
 }
 
 // Allocate a file structure.
+//分配一个没有被占用的描述符
 struct file*
 filealloc(void)
 {
